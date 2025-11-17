@@ -59,14 +59,19 @@ if not edited_df.empty:
     df2 = edited_df.copy()
     df2["תאריך"] = pd.to_datetime(df2["תאריך"])
     
-    # הפיכת הוצאות לשליליות
-    df2["סכום_מתוקן"] = df2.apply(
-        lambda row: row["סכום"] if row["סוג"] == "הכנסה" else -abs(row["סכום"]),
-        axis=1
-    )
+    # המרה של הסכום למספר, ריק = 0
+    df2["סכום"] = pd.to_numeric(df2["סכום"], errors="coerce").fillna(0)
+    
+    # הפיכת הוצאה לשלילית
+    def fix_amount(row):
+        amount = row["סכום"]
+        if row["סוג"] == "הכנסה":
+            return amount
+        else:
+            return -abs(amount)
+    
+    df2["סכום_מתוקן"] = df2.apply(fix_amount, axis=1)
 
-    df2 = df2.sort_values("תאריך")
-    df2["מצטבר"] = df2["סכום_מתוקן"].cumsum()
 
     st.subheader("📊 גרף תזרים לפי זמן")
     st.line_chart(df2.set_index("תאריך")["מצטבר"])
