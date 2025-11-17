@@ -3,16 +3,16 @@ import pandas as pd
 import json
 from io import StringIO
 
-st.set_page_config(page_title="Cashflow Timeline", layout="wide")
+st.set_page_config(page_title="ניהול תזרים", layout="wide")
 
-st.title("📈 Cashflow Timeline Manager")
+st.title("💰 ניהול תזרים מזומנים")
 
 # ---------------------------------------------------
-# Load file (CSV or JSON)
+# טעינת קובץ
 # ---------------------------------------------------
 def load_file(uploaded_file):
     if uploaded_file is None:
-        return pd.DataFrame(columns=["Date", "Description", "Amount"])
+        return pd.DataFrame(columns=["תאריך", "תיאור", "סוג", "סכום"])
     name = uploaded_file.name.lower()
 
     if name.endswith(".csv"):
@@ -21,66 +21,81 @@ def load_file(uploaded_file):
         raw = json.load(uploaded_file)
         df = pd.DataFrame(raw)
     else:
-        st.error("File must be CSV or JSON")
-        return pd.DataFrame(columns=["Date", "Description", "Amount"])
+        st.error("הקובץ חייב להיות CSV או JSON")
+        return pd.DataFrame(columns=["תאריך", "תיאור", "סוג", "סכום"])
 
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.date
+    if "תאריך" in df.columns:
+        df["תאריך"] = pd.to_datetime(df["תאריך"]).dt.date
 
     return df
 
 
-uploaded = st.file_uploader("📥 Load CSV or JSON file", type=["csv", "json"])
+uploaded = st.file_uploader("📥 טען קובץ CSV או JSON", type=["csv", "json"])
 
 df = load_file(uploaded)
 
-st.subheader("✏️ Edit Entries")
+st.subheader("✏️ עריכת תנועות תזרים")
 
 # ---------------------------------------------------
-# Editable table
+# עורך הטבלה
 # ---------------------------------------------------
 edited_df = st.data_editor(
     df,
     num_rows="dynamic",
-    use_container_width=True
+    use_container_width=True,
+    column_config={
+        "סוג": st.column_config.SelectboxColumn(
+            "סוג",
+            help="בחר הכנסה או הוצאה",
+            options=["הכנסה", "הוצאה"]
+        )
+    }
 )
 
 # ---------------------------------------------------
-# Compute timeline + cumulative
+# עיבוד תזרים לפי סוג
 # ---------------------------------------------------
-st.subheader("📊 Timeline and Cashflow Summary")
-
 if not edited_df.empty:
-    tmp = edited_df.copy()
-    tmp["Date"] = pd.to_datetime(tmp["Date"])
-    tmp = tmp.sort_values("Date")
-    tmp["Cumulative"] = tmp["Amount"].cumsum()
+    df2 = edited_df.copy()
+    df2["תאריך"] = pd.to_datetime(df2["תאריך"])
+    
+    # הפיכת הוצאות לשליליות
+    df2["סכום_מתוקן"] = df2.apply(
+        lambda row: row["סכום"] if row["סוג"] == "הכנסה" else -abs(row["סכום"]),
+        axis=1
+    )
 
-    st.line_chart(tmp.set_index("Date")["Cumulative"])
-    st.write(tmp)
+    df2 = df2.sort_values("תאריך")
+    df2["מצטבר"] = df2["סכום_מתוקן"].cumsum()
+
+    st.subheader("📊 גרף תזרים לפי זמן")
+    st.line_chart(df2.set_index("תאריך")["מצטבר"])
+
+    st.write("📄 טבלה מלאה:")
+    st.write(df2[["תאריך", "תיאור", "סוג", "סכום", "מצטבר"]])
 else:
-    st.info("Add entries above to generate a timeline.")
+    st.info("הוסף תנועות כדי לראות גרף תזרים.")
 
 # ---------------------------------------------------
-# Save buttons
+# שמירה
 # ---------------------------------------------------
-st.subheader("💾 Export Data")
+st.subheader("💾 שמירת נתונים")
 
 col1, col2 = st.columns(2)
 
 with col1:
     csv_data = edited_df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="Download as CSV",
+        label="📤 הורדה כ-CSV",
         data=csv_data,
         file_name="cashflow.csv",
         mime="text/csv"
     )
 
 with col2:
-    json_data = edited_df.to_json(orient="records", indent=2)
+    json_data = edited_df.to_json(orient="records", indent=2, force_ascii=False)
     st.download_button(
-        label="Download as JSON",
+        label="📤 הורדה כ-JSON",
         data=json_data,
         file_name="cashflow.json",
         mime="application/json"
