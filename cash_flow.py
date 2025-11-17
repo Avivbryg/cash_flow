@@ -8,7 +8,7 @@ st.set_page_config(page_title="ניהול תזרים", layout="wide")
 st.title("💰 ניהול תזרים מזומנים")
 
 # ---------------------------------------------------
-# טעינת קובץ
+# פונקציה לטעינת קובץ
 # ---------------------------------------------------
 def load_file(uploaded_file):
     if uploaded_file is None:
@@ -24,6 +24,7 @@ def load_file(uploaded_file):
         st.error("הקובץ חייב להיות CSV או JSON")
         return pd.DataFrame(columns=["תאריך", "תיאור", "סוג", "סכום"])
 
+    # המרה לתאריך נכון
     if "תאריך" in df.columns:
         df["תאריך"] = pd.to_datetime(df["תאריך"]).dt.date
 
@@ -37,7 +38,7 @@ df = load_file(uploaded)
 st.subheader("✏️ עריכת תנועות תזרים")
 
 # ---------------------------------------------------
-# עורך הטבלה
+# עורך טבלה עם בחירת סוג הכנסה/הוצאה
 # ---------------------------------------------------
 edited_df = st.data_editor(
     df,
@@ -53,36 +54,47 @@ edited_df = st.data_editor(
 )
 
 # ---------------------------------------------------
-# עיבוד תזרים לפי סוג
+# עיבוד תזרים לפי סוג ובניית המצטבר
 # ---------------------------------------------------
 if not edited_df.empty:
     df2 = edited_df.copy()
-    df2["תאריך"] = pd.to_datetime(df2["תאריך"])
-    
+
+    # תאריך לפורמט datetime
+    df2["תאריך"] = pd.to_datetime(df2["תאריך"], errors="coerce")
+
     # המרה של הסכום למספר, ריק = 0
     df2["סכום"] = pd.to_numeric(df2["סכום"], errors="coerce").fillna(0)
-    
+
     # הפיכת הוצאה לשלילית
     def fix_amount(row):
-        amount = row["סכום"]
         if row["סוג"] == "הכנסה":
-            return amount
+            return row["סכום"]
         else:
-            return -abs(amount)
-    
+            return -abs(row["סכום"])
+
     df2["סכום_מתוקן"] = df2.apply(fix_amount, axis=1)
 
+    # מיון לפי תאריך
+    df2 = df2.sort_values("תאריך")
 
+    # חישוב מצטבר
+    df2["מצטבר"] = df2["סכום_מתוקן"].cumsum()
+
+    # ---------------------------------------------------
+    # גרף תזרים
+    # ---------------------------------------------------
     st.subheader("📊 גרף תזרים לפי זמן")
     st.line_chart(df2.set_index("תאריך")["מצטבר"])
 
+    # טבלה מלאה
     st.write("📄 טבלה מלאה:")
     st.write(df2[["תאריך", "תיאור", "סוג", "סכום", "מצטבר"]])
+
 else:
     st.info("הוסף תנועות כדי לראות גרף תזרים.")
 
 # ---------------------------------------------------
-# שמירה
+# שמירת קבצים
 # ---------------------------------------------------
 st.subheader("💾 שמירת נתונים")
 
